@@ -18,14 +18,16 @@ namespace RaceCalc
         public void ReadInputs()
         {
             //testing inputs
+            /*
             consump = 6;
             fuel_multiplier = 1;
             tanksize = 100;
             laptime_text = "1:30";
             dur_laps = 40;
             dur_time = "1:30";
+            */
 
-            //check radio buttons again (just in case...)
+            //check radio buttons
             if (radioButton1.Checked)
             {
                 inputmode = "laps";
@@ -39,14 +41,15 @@ namespace RaceCalc
             consump = Convert.ToDouble(textBox1.Text);
             fuel_multiplier = Convert.ToDouble(numericUpDown1.Value);
             tanksize = Convert.ToInt32(textBox2.Text);
+            stint_weight = trackBar1.Value;
             laptime_text = maskedTextBox1.Text;
+
+            laptime_num = TimeStr2Num(laptime_text); //convert laptime to num
 
             if (max_tires)
             {
                 max_laps_tires = Convert.ToDouble(textBox3.Text);
             }
-
-            laptime_num = TimeStr2Num(laptime_text); //convert laptime to num
 
             //race duration input (laps / time)
             switch (inputmode)
@@ -54,11 +57,11 @@ namespace RaceCalc
                 case "laps":
                     dur_laps = Convert.ToDouble(durLapsUpDown.Value);
                     dur_num = dur_laps * laptime_num;
-                    dur_time = TimeNum2Str(Math.Round(dur_num, 2)); //convert duration to time
+                    dur_time = TimeNum2Str(Math.Round(dur_num, 2)); //convert duration from number to string
                     break;
                 case "time":
                     dur_time = durTimeTextBox.Text;
-                    dur_num = TimeStr2Num(dur_time); //convert duration to num
+                    dur_num = TimeStr2Num(dur_time); //convert duration from string to number
                     dur_laps = dur_num / laptime_num;
                     break;
             }
@@ -183,18 +186,18 @@ namespace RaceCalc
 
         public void CalculateOutput()
         {
+            //abort calculation if race duration is shorter than laptime
             if (dur_num < laptime_num)
             {
                 MessageBox.Show("Race duration is smaller than laptime");
                 return;
             }
 
-            consump_notires = consump;
-            consump *= fuel_multiplier; //apply fuel multiplier
+            consump *= fuel_multiplier;             //apply fuel multiplier
 
 
             //calculations
-            max_laps = tanksize / consump;
+            max_laps = Math.Floor(tanksize / consump);
 
             //determine limiting factor (fuel / tires)
             if (max_tires == true && max_laps_tires < max_laps)
@@ -209,11 +212,29 @@ namespace RaceCalc
                 return;
             }
 
-            max_time_num = max_laps * laptime_num;
-            max_time = TimeNum2Str(Math.Round(max_time_num, 2)); //convert max time to time
+            max_time_num = max_laps * laptime_num;                  //calculate maximum time in numbers
+            max_time = TimeNum2Str(Math.Round(max_time_num, 2));    //convert max time to time
 
             min_stints = dur_laps / max_laps;
             min_pits = min_stints;
+            
+            stint_length_laps = trackBar1.Value;
+            stint_length_num = stint_length_laps * laptime_num;
+            stint_length_time = TimeNum2Str(stint_length_num);
+            equal_lengths = Convert.ToInt32(dur_laps / Math.Ceiling(min_stints)); //laps if all stints are same length
+
+            //adjust slider values
+            if (first_calc)
+            {
+                int slider_temp = (trackBar1.Value - trackBar1.Minimum) / (trackBar1.Maximum - trackBar1.Minimum);
+                stint_length_laps = equal_lengths + ((Convert.ToInt32(max_laps) - equal_lengths) * slider_temp);
+                trackBar1.Minimum = equal_lengths;
+                trackBar1.Maximum = Convert.ToInt32(max_laps);
+                trackBar1.Value = stint_length_laps;             //go to new lower/upper limit depending on current pos
+                label19.Text = Convert.ToString(trackBar1.Minimum);
+                label20.Text = Convert.ToString(trackBar1.Maximum);
+                first_calc = false;
+            }
 
             //stint arrays
             double[] stint_laps = new double[Convert.ToInt32(Math.Ceiling(min_stints))];
@@ -230,12 +251,12 @@ namespace RaceCalc
             //stint detail
             for (int i = 0; i < stint_laps.Length; i++)
             {
-                stint_laps[i] = max_laps; //stint laps
-                stint_time[i] = max_time;
+                stint_laps[i] = stint_length_laps;
+                stint_time[i] = stint_length_time;
 
-                if (i == (stint_laps.Length - 1)) //last stint case
+                if (i == (stint_laps.Length - 1))           //last stint case
                 {
-                    stint_laps[i] = dur_laps - (max_laps * i);
+                    stint_laps[i] = dur_laps - (stint_length_laps * i);
                     stint_time[i] = TimeNum2Str(stint_laps[i] * laptime_num);
                 }
 
@@ -245,15 +266,15 @@ namespace RaceCalc
             //pitstop detail
             for (int i = 0; i < pit_laps.Length; i++)
             {
-                pit_at_lap[i] = i * max_laps;
-                pit_at_time[i] = TimeNum2Str(i * max_time_num);
+                pit_at_lap[i] = i * stint_length_laps;
+                pit_at_time[i] = TimeNum2Str(i * stint_length_num);
 
-                pit_laps[i] = max_laps;
-                pit_time[i] = max_time;
+                pit_laps[i] = stint_length_laps;
+                pit_time[i] = stint_length_time;
 
-                if (i == (pit_laps.Length - 1)) //last pitstop case
+                if (i == (pit_laps.Length - 1))             //last pitstop case
                 {
-                    pit_laps[i] = dur_laps - (i * max_laps);
+                    pit_laps[i] = dur_laps - (i * stint_length_laps);
                     pit_time[i] = TimeNum2Str(pit_laps[i] * laptime_num);
                 }
 
@@ -320,7 +341,7 @@ namespace RaceCalc
             //values without tires limiting
             if (max_tires)
             {
-                double max_laps_notires = Math.Round(tanksize / consump_notires, 2);
+                double max_laps_notires = Math.Round(tanksize / consump, 2);
                 double max_time_num_notires = Math.Round(max_laps_notires + laptime_num, 2);
                 string max_time_notires = TimeNum2Str(Math.Round(max_time_num_notires, 2));
                 double min_stints_notires = Math.Round(dur_laps / max_laps_notires, 2);
@@ -339,27 +360,34 @@ namespace RaceCalc
 
 
         //declaring input variables
-        bool max_tires = false;
-        double consump;
-        double consump_notires;
-        int tanksize;
-        double fuel_multiplier;
-        string laptime_text;
-        double laptime_num;
-        string inputmode = "laps";
-        double dur_laps = 0;
-        string dur_time = "00:00";
-        double dur_num;
-        double max_laps_tires = 999;
-        //declaring internal variables
-        double max_time_num; // max time on 1 tank num
-        //declaring saving variables
-        string savename;
-        //declaring output variables
-        double max_laps;
-        string max_time;
-        double min_pits;
-        double min_stints;
+        bool max_tires = false;         //are tires limiting factor?
+        double consump;                 //fuel consumption value
+        int tanksize;                   //tanksize in l
+        double fuel_multiplier;         //input multiplier for fuel consumption
+        string laptime_text;            //input laptime in string form
+        double laptime_num;             //laptime converted to decimal number
+        string inputmode = "laps";      //inputmode for race duration (laps / time)
+        double dur_laps = 0;            //duration in laps
+        string dur_time = "00:00";      //duration in time in text form
+        double dur_num;                 //duration in time converted to decimal number
+        double max_laps_tires = 999;    //input maximum laps on one set of tires
+        int stint_weight;               //input value of the stint variation slider
+
+        string savename;                //input name for saving
+
+        //internal variables
+        double max_time_num;            // max time on 1 tank in decimal number
+        int stint_length_laps;          //desired length of stints in laps (calculated from slider value)     
+        double stint_length_num;        //desired length of stints in time (numbers)
+        string stint_length_time;       //desired length of stints in time (converted to string)   
+        int equal_lengths;              //stint laps if all stints are same length
+        bool first_calc = true;         //first time calculating? (for slider adjusting)
+
+        //output variables
+        double max_laps;                //max possible number of laps
+        string max_time;                //max possible number of time
+        double min_pits;                //min necessary number of pitstops
+        double min_stints;              //min necessary number of stints
 
 
         public Form1()
@@ -373,6 +401,8 @@ namespace RaceCalc
             maskedTextBox1.Text = "01:30";
             durLapsUpDown.Value = 43;
             durTimeTextBox.Text = "60:00";
+            label19.Text = "";
+            label20.Text = "";
 
             ReadSaves();
 
@@ -412,17 +442,20 @@ namespace RaceCalc
                 this.Size = new Size(800, 700);
                 this.MaximumSize = new Size(800, 700);
                 this.MinimumSize = new Size(800, 700);
-                panel2.Height = 200;
+                panel2.Height = 228;
                 dataGridView1.Visible = true;
+                label16.Visible = true;
+                label17.Visible = true;
             }
             else
             {
-                this.Size = new Size(800, 545);
-                this.MaximumSize = new Size(800, 545);
-                this.MinimumSize = new Size(800, 545);
+                this.Size = new Size(800, 522);
+                this.MaximumSize = new Size(800, 522);
+                this.MinimumSize = new Size(800, 522);
                 panel2.Height = 50;
                 dataGridView1.Visible = false;
-
+                label16.Visible = false;
+                label17.Visible = false;
             }
         }
 
@@ -537,7 +570,47 @@ namespace RaceCalc
                 LoadFromFile(path);
             }
 
+            first_calc = true;  //reset slider for new values
         }
 
+        private void trackBar1_Scroll(object sender, EventArgs e)
+        {
+            dataGridView1.Rows.Clear();
+            dataGridView1.Refresh();
+
+            ReadInputs();
+
+            CalculateOutput();
+        }
+
+        private void textBox2_TextChanged(object sender, EventArgs e)
+        {
+            first_calc = true;  //reset slider for new values
+        }
+
+        private void maskedTextBox1_MaskInputRejected(object sender, MaskInputRejectedEventArgs e)
+        {
+            first_calc = true;  //reset slider for new values
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+            first_calc = true;  //reset slider for new values
+        }
+
+        private void durLapsUpDown_ValueChanged(object sender, EventArgs e)
+        {
+            first_calc = true;  //reset slider for new values
+        }
+
+        private void durTimeTextBox_MaskInputRejected(object sender, MaskInputRejectedEventArgs e)
+        {
+            first_calc = true;  //reset slider for new values
+        }
+
+        private void numericUpDown1_ValueChanged(object sender, EventArgs e)
+        {
+            first_calc = true;  //reset slider for new values
+        }
     }
 }
